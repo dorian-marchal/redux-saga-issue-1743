@@ -22,22 +22,23 @@ function reducer(state = {}, action) {
   return state;
 }
 
+const aLittleTime = () => (Math.random() + 0.5) * 1000;
+
 const sagaMiddleware = createSagaMiddleware();
 
 const bindMiddleware = (middlewares = []) => applyMiddleware(...middlewares);
 
-function* loadPage() {
-  const id = _.uniqueId();
-  yield delay(1000);
-  yield put({ type: 'HEADER', payload: id });
-  yield delay(1000);
-  yield put({ type: 'BODY', payload: id });
-  yield delay(1000);
-  yield put({ type: 'FOOTER', payload: id });
+function* onLoadPage({ payload: { name } }) {
+  yield delay(aLittleTime());
+  yield put({ type: 'HEADER', payload: name });
+  yield delay(aLittleTime());
+  yield put({ type: 'BODY', payload: name });
+  yield delay(aLittleTime());
+  yield put({ type: 'FOOTER', payload: name });
 }
 
 function* rootSaga() {
-  yield all([takeLatest('LOAD_PAGE', loadPage)]);
+  yield all([takeLatest('LOAD_PAGE', onLoadPage)]);
 }
 
 function configureStore(state = initialState) {
@@ -57,4 +58,10 @@ function configureStore(state = initialState) {
 
 const store = configureStore({});
 
-store.dispatch({ type: 'LOAD_PAGE' });
+const loadPage = (name) => store.dispatch({ type: 'LOAD_PAGE', payload: { name } });
+
+loadPage('home');
+loadPage('news');
+loadPage('contact');
+loadPage('reviews');
+loadPage('games');
