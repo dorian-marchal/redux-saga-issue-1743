@@ -1,6 +1,6 @@
 import { createStore, applyMiddleware } from 'redux';
 import createSagaMiddleware, { END } from 'redux-saga';
-import { all, takeEvery, put, call, select } from 'redux-saga/effects';
+import { all, takeLatest, put, call, select } from 'redux-saga/effects';
 import { delay } from 'redux-saga';
 import _ from 'lodash';
 
@@ -39,25 +39,16 @@ const bindMiddleware = (middlewares = []) => applyMiddleware(...middlewares);
 
 function* onLoadPage({ payload: { name } }) {
   yield call(delay, aLittleTime());
-  // Ensure the page is the same.
-  const loadingPage = yield select((state) => state.loadingPage);
-  // Better find a way to cancel this saga to avoid uneeded fetch.
-  // maybe use `takeLatest` with an other way to know if the page is loaded in getInitialProps.
-  // Awaiting a listener on store could work.
-  // Could we dispatch a callback that would be called by saga when the page is loaded?
-  if (loadingPage === name) {
-    yield put({ type: 'HEADER', payload: name });
-    yield put({ type: 'BODY', payload: name });
-    yield put({ type: 'FOOTER', payload: name });
-    yield put({ type: 'PAGE_LOADED' });
-  } else {
-    yield put({ type: 'PAGE_CANCELED', payload: name });
-  }
+  // Update actions should be dispatched synchronously at the end of the page load saga.
+  // This avoids partial state change before the page change.
+  yield put({ type: 'HEADER', payload: name });
+  yield put({ type: 'BODY', payload: name });
+  yield put({ type: 'FOOTER', payload: name });
+  yield put({ type: 'PAGE_LOADED', payload: name });
 }
 
 function* rootSaga() {
-  // takeLatest can't be used, here, as saga is stopped/restarted each time a page is loaded.
-  yield all([takeEvery('LOAD_PAGE', onLoadPage)]);
+  yield all([takeLatest('LOAD_PAGE', onLoadPage)]);
 }
 
 function configureStore(state = initialState) {
@@ -87,9 +78,16 @@ const store = configureStore({});
 
 const getInitialProps = async (name) => {
   store.dispatch({ type: 'LOAD_PAGE', payload: { name } });
-  const sagaEnd = store.stopSagaTask();
   store.runSagaTask();
-  await sagaEnd;
+  await new Promise((resolve) => {
+    const unsubscribe = store.subscribe(() => {
+      const { loadingPage } = store.getState();
+      if (loadingPage !== name) {
+        unsubscribe();
+        resolve();
+      }
+    });
+  });
   console.log(`${name} getInitialProps ended.`);
 };
 
@@ -104,6 +102,8 @@ async function main() {
   getInitialProps('contact');
   await wait(aLittleTime());
   getInitialProps('reviews');
+  await wait(aLittleTime());
+  getInitialProps('games');
   await wait(aLittleTime());
   getInitialProps('games');
 }
